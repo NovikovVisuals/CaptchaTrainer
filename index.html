@@ -2,10 +2,11 @@
 <html lang="ru">
 	<head>
 		<meta charset="UTF-8" />
-		<title>Тренажёр Капчи</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Тренажёр Капчи - Speed Test</title>
 		<style>
 			body {
-				font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+				font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 				display: flex;
 				flex-direction: column;
 				align-items: center;
@@ -22,87 +23,136 @@
 				border-radius: 15px;
 				box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 				text-align: center;
-				width: 350px;
+				width: 360px;
 			}
 
 			#captchaCanvas {
 				background-color: #333;
 				border-radius: 8px;
-				margin-bottom: 20px;
+				margin-bottom: 15px;
 				border: 2px solid #444;
-				max-width: 100%;
+				display: block;
+				margin-left: auto;
+				margin-right: auto;
 			}
 
 			.input-group {
 				display: flex;
 				flex-direction: column;
-				gap: 10px;
+				gap: 12px;
 				align-items: center;
 			}
 
 			input {
 				padding: 12px;
-				font-size: 1.2rem;
+				font-size: 1.3rem;
 				border-radius: 8px;
-				border: none;
+				border: 2px solid #444;
 				width: 80%;
 				text-align: center;
 				outline: none;
 				background: #eee;
+				color: #222;
 			}
 
-			/* Стиль новой кнопки */
 			.check-btn {
-				padding: 12px 25px;
-				font-size: 1rem;
+				padding: 12px;
+				font-size: 1.1rem;
 				font-weight: bold;
 				color: white;
 				background-color: #4a90e2;
 				border: none;
 				border-radius: 8px;
 				cursor: pointer;
-				transition:
-					background 0.2s,
-					transform 0.1s;
 				width: 87%;
-			}
-
-			.check-btn:hover {
-				background-color: #357abd;
-			}
-
-			.check-btn:active {
-				transform: scale(0.98);
-			}
-
-			.stats {
-				margin-top: 20px;
-				font-size: 0.9rem;
-				color: #aaa;
 			}
 
 			.message {
 				margin-top: 15px;
-				height: 20px;
+				height: 24px;
 				font-weight: bold;
+			}
+
+			.stats-panel {
+				margin-top: 20px;
+				padding-top: 15px;
+				border-top: 1px solid #444;
+				color: #bbb;
+			}
+
+			.timer-box {
+				font-size: 1.2rem;
+				color: #4a90e2;
+				margin-bottom: 10px;
+			}
+
+			/* Блок последних результатов */
+			.history-panel {
+				margin-top: 15px;
+				background: #222;
+				padding: 10px;
+				border-radius: 8px;
+				font-size: 0.85rem;
+			}
+			.history-title {
+				color: #888;
+				margin-bottom: 5px;
+				text-transform: uppercase;
+				font-size: 0.75rem;
+				letter-spacing: 1px;
+			}
+			.history-item {
+				display: flex;
+				justify-content: space-between;
+				padding: 4px 10px;
+				border-bottom: 1px solid #333;
+				animation: fadeIn 0.3s ease;
+			}
+			.history-item:last-child {
+				border-bottom: none;
+			}
+			.h-code {
+				color: #ffb74d;
+				font-family: monospace;
+				font-size: 1rem;
+			}
+			.h-time {
+				color: #81c784;
+				font-weight: bold;
+			}
+
+			@keyframes fadeIn {
+				from {
+					opacity: 0;
+					transform: translateY(-5px);
+				}
+				to {
+					opacity: 1;
+					transform: translateY(0);
+				}
 			}
 		</style>
 	</head>
 	<body>
 		<div class="container">
-			<h2>Тренажёр ввода</h2>
-
 			<canvas id="captchaCanvas" width="300" height="100"></canvas>
 
 			<div class="input-group">
-				<input type="text" id="userInput" placeholder="Введите код..." autocomplete="off" />
+				<input type="text" id="userInput" placeholder="Код здесь..." autocomplete="off" />
 				<button class="check-btn" id="checkBtn">Проверить</button>
 			</div>
 
-			<div class="message" id="message"></div>
+			<div id="message" class="message"></div>
 
-			<div class="stats">
-				✅ Верно: <span id="score">0</span> | ❌ Ошибок: <span id="errors">0</span>
+			<div class="stats-panel">
+				<div class="timer-box">⏱ <span id="lastTime">0.00</span> сек</div>
+
+				<div class="history-panel">
+					<div class="history-title">Последние 3 результата</div>
+					<div id="historyList">
+						<div style="color: #555">История пуста</div>
+					</div>
+				</div>
 			</div>
 		</div>
 
@@ -112,97 +162,93 @@
 				const ctx = canvas.getContext('2d');
 				const input = document.getElementById('userInput');
 				const checkBtn = document.getElementById('checkBtn');
-				const scoreEl = document.getElementById('score');
-				const errorsEl = document.getElementById('errors');
 				const messageEl = document.getElementById('message');
+				const lastTimeEl = document.getElementById('lastTime');
+				const historyListEl = document.getElementById('historyList');
 
 				let currentCaptcha = '';
-				let score = 0;
-				let errors = 0;
+				let startTime = Date.now();
+				let timerInterval = null;
+				let history = []; // Массив для хранения последних 3 результатов
+
+				function updateRunningTimer() {
+					const now = Date.now();
+					lastTimeEl.textContent = ((now - startTime) / 1000).toFixed(2);
+				}
 
 				function generateCaptcha() {
+					clearInterval(timerInterval);
+					startTime = Date.now();
+					timerInterval = setInterval(updateRunningTimer, 50);
+
 					currentCaptcha = '';
 					ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-					// Шум
-					for (let i = 0; i < 40; i++) {
-						ctx.fillStyle = `rgba(${Math.random() * 255},${Math.random() * 255},${Math.random() * 255},0.15)`;
-						ctx.beginPath();
-						ctx.arc(
-							Math.random() * canvas.width,
-							Math.random() * canvas.height,
-							Math.random() * 4,
-							0,
-							Math.PI * 2,
-						);
-						ctx.fill();
-					}
-
 					const chars = '0123456789';
-					const colors = ['#e57373', '#ffb74d', '#81c784', '#64b5f6', '#ce93d8'];
-
 					for (let i = 0; i < 5; i++) {
 						const char = chars.charAt(Math.floor(Math.random() * chars.length));
 						currentCaptcha += char;
-
-						const fontSize = Math.floor(Math.random() * 15) + 40;
-						const angle = (Math.random() - 0.5) * 0.5;
-						const x = 40 + i * 45;
-						const y = 60 + (Math.random() - 0.5) * 15;
-
 						ctx.save();
-						ctx.translate(x, y);
-						ctx.rotate(angle);
-						ctx.font = `bold ${fontSize}px "Courier New", Courier, monospace`;
-						ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
-						ctx.shadowBlur = 3;
-						ctx.shadowColor = 'rgba(0,0,0,0.5)';
+						ctx.translate(35 + i * 50, 65 + (Math.random() - 0.5) * 15);
+						ctx.rotate((Math.random() - 0.5) * 0.35);
+						ctx.font = `bold ${Math.floor(Math.random() * 10) + 48}px Arial`;
+						ctx.fillStyle = ['#e57373', '#ffb74d', '#81c784', '#64b5f6', '#ce93d8'][
+							Math.floor(Math.random() * 5)
+						];
 						ctx.fillText(char, 0, 0);
 						ctx.restore();
 					}
-
-					// Помехи (линии)
-					for (let i = 0; i < 4; i++) {
-						ctx.strokeStyle = `rgba(255,255,255,0.1)`;
-						ctx.lineWidth = 1;
-						ctx.beginPath();
-						ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
-						ctx.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
-						ctx.stroke();
-					}
 				}
 
-				// Главная функция проверки
+				function updateHistoryUI(code, time) {
+					// Добавляем в начало массива
+					history.unshift({ code, time });
+					// Оставляем только 3 элемента
+					if (history.length > 3) history.pop();
+
+					historyListEl.innerHTML = history
+						.map(
+							(item) => `
+            <div class="history-item">
+                <span class="h-code">${item.code}</span>
+                <span class="h-time">${item.time} сек</span>
+            </div>
+        `,
+						)
+						.join('');
+				}
+
 				function checkResult() {
 					const userValue = input.value.trim();
-
-					if (userValue === '') return; // Игнорируем пустой ввод
+					if (userValue === '') return;
 
 					if (userValue === currentCaptcha) {
-						score++;
-						scoreEl.textContent = score;
+						clearInterval(timerInterval);
+						const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2);
+
 						messageEl.style.color = '#81c784';
 						messageEl.textContent = '✅ Верно!';
+
+						updateHistoryUI(currentCaptcha, timeTaken);
+
 						input.value = '';
 						generateCaptcha();
 					} else {
-						errors++;
-						errorsEl.textContent = errors;
 						messageEl.style.color = '#e57373';
-						messageEl.textContent = `❌ Ошибка! Было: ${currentCaptcha}`;
+						messageEl.textContent = `❌ Ошибка!`;
 						input.value = '';
-						// generateCaptcha(); // Если хочешь новую капчу при ошибке — убери комментарий
 					}
-					input.focus(); // Возвращаем фокус на поле ввода
+					input.focus();
 				}
 
-				// Обработка кнопки
 				checkBtn.addEventListener('click', checkResult);
-
-				// Обработка Enter
-				input.addEventListener('keypress', (e) => {
-					if (e.key === 'Enter') checkResult();
+				input.addEventListener('keydown', (e) => {
+					if (e.key === 'Enter') {
+						e.preventDefault();
+						checkResult();
+					}
 				});
+				document.addEventListener('click', () => input.focus());
 
 				generateCaptcha();
 			}
